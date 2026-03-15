@@ -1,0 +1,92 @@
+---
+title: 'Login'
+description: 'Authenticate with a username and password to receive access and refresh tokens.'
+---
+
+`POST /api/auth/login`
+
+Authenticates a user with their username and password. On success, returns a short-lived JWT access token in the response body and sets a long-lived refresh token as an `HttpOnly` cookie.
+
+<Note>
+  The `refreshToken` cookie is set automatically by the server. You do not need to handle it manually in most HTTP clients — browsers and tools that respect cookies (such as curl with a cookie jar) will store and send it automatically.
+</Note>
+
+## Request body
+
+<ParamField body="username" type="string" required>
+  The account username.
+</ParamField>
+
+<ParamField body="password" type="string" required>
+  The account password.
+</ParamField>
+
+## Response
+
+<ResponseField name="accessToken" type="string" required>
+  A signed JWT used to authenticate subsequent API requests. Expires after 15 minutes. Pass this token in the `Authorization: Bearer <token>` header.
+</ResponseField>
+
+### Set-Cookie header
+
+The server sets a `refreshToken` cookie with the following attributes:
+
+| Attribute | Value |
+| --- | --- |
+| `HttpOnly` | `true` — not accessible from JavaScript |
+| `SameSite` | `Strict` |
+| `Secure` | `true` in production |
+| `Max-Age` | 7 days |
+
+Use this cookie to obtain a new access token via the [Refresh](/api-reference/auth/refresh) endpoint when the current one expires.
+
+## Error codes
+
+| Status | Meaning |
+| --- | --- |
+| `400 Bad Request` | One or more request body fields failed validation. |
+| `401 Unauthorized` | The username does not exist or the password is incorrect. |
+
+<Warning>
+  For security reasons, the API returns the same `"Invalid credentials"` message for both an unknown username and a wrong password. This prevents username enumeration.
+</Warning>
+
+<RequestExample>
+
+```bash cURL
+curl --request POST \
+  --url https://api.scheduly.com/api/auth/login \
+  --header 'Content-Type: application/json' \
+  --cookie-jar ./cookies.txt \
+  --data '{
+    "username": "jhojanRop",
+    "password": "supersecret"
+  }'
+```
+
+```json Request body
+{
+  "username": "jhojanRop",
+  "password": "supersecret"
+}
+```
+
+</RequestExample>
+
+<ResponseExample>
+
+```json 200
+{
+  "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjbHg3azJtMGUwMDAwYWJjZDEyMzRlZmdoIiwidXNlcm5hbWUiOiJqaG9qYW5Sb3AiLCJpYXQiOjE3NDE5NzYwMDAsImV4cCI6MTc0MTk3NjkwMH0.signature"
+}
+```
+
+```json 401
+{
+  "statusCode": 401,
+  "message": "Invalid credentials",
+  "error": "Unauthorized"
+}
+```
+
+</ResponseExample>

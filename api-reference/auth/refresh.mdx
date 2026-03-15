@@ -1,0 +1,80 @@
+---
+title: 'Refresh token'
+description: 'Exchange a valid refresh token cookie for a new access token and rotated refresh token.'
+---
+
+`POST /api/auth/refresh`
+
+Issues a new access token using the `refreshToken` cookie set during [login](/api-reference/auth/login). The refresh token is rotated on every successful call — the old token is invalidated and a new cookie is set in the response.
+
+<Note>
+  This endpoint reads the `refreshToken` cookie automatically. You do not send a request body or an `Authorization` header. Ensure your HTTP client includes cookies when making this request.
+</Note>
+
+## Authentication
+
+This endpoint requires a valid `refreshToken` cookie. It does **not** accept a Bearer token.
+
+| Cookie | Required | Description |
+| --- | --- | --- |
+| `refreshToken` | Yes | The refresh token issued at login or from a previous refresh call. |
+
+## Request body
+
+None.
+
+## Response
+
+<ResponseField name="accessToken" type="string" required>
+  A new signed JWT for authenticating API requests. Expires after 15 minutes.
+</ResponseField>
+
+### Rotated Set-Cookie header
+
+The server replaces the existing `refreshToken` cookie with a new one. The new cookie has the same attributes as those set at login:
+
+| Attribute | Value |
+| --- | --- |
+| `HttpOnly` | `true` |
+| `SameSite` | `Strict` |
+| `Secure` | `true` in production |
+| `Max-Age` | 7 days |
+
+<Warning>
+  Each refresh token can only be used once. After a successful refresh, the previous cookie value is no longer valid. Store and use only the most recently issued refresh token cookie.
+</Warning>
+
+## Error codes
+
+| Status | Meaning |
+| --- | --- |
+| `401 Unauthorized` | The `refreshToken` cookie is missing, expired, or has an invalid signature. |
+
+<RequestExample>
+
+```bash cURL
+curl --request POST \
+  --url https://api.scheduly.com/api/auth/refresh \
+  --cookie ./cookies.txt \
+  --cookie-jar ./cookies.txt
+```
+
+</RequestExample>
+
+<ResponseExample>
+
+```json 200
+{
+  "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjbHg3azJtMGUwMDAwYWJjZDEyMzRlZmdoIiwidXNlcm5hbWUiOiJqaG9qYW5Sb3AiLCJpYXQiOjE3NDE5NzY5MDAsImV4cCI6MTc0MTk3NzgwMH0.signature"
+}
+```
+
+```json 401
+{
+  "statusCode": 401,
+  "message": "Invalid or expired refresh token",
+  "error": "Unauthorized"
+}
+```
+
+</ResponseExample>

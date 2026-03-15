@@ -1,0 +1,154 @@
+---
+title: 'Update section'
+description: 'Replace all fields of an existing section with new values.'
+---
+
+`PUT /api/sections/:id`
+
+Fully replaces the fields of an existing section. All body fields are required. The existing meeting days are deleted and recreated from the provided `dayIds`.
+
+<Info>
+  All requests must include a valid Bearer token in the `Authorization` header.
+</Info>
+
+## Path parameters
+
+<ParamField path="id" type="string" required>
+  UUID of the section to update.
+</ParamField>
+
+## Request body
+
+<ParamField body="startTime" type="string" required>
+  New start time in `HH:MM` 24-hour format. Example: `"08:00"`.
+</ParamField>
+
+<ParamField body="endTime" type="string" required>
+  New end time in `HH:MM` 24-hour format. Must be after `startTime`. Example: `"10:00"`.
+</ParamField>
+
+<ParamField body="subjectId" type="string" required>
+  UUID of the subject this section belongs to. Must belong to the authenticated user.
+</ParamField>
+
+<ParamField body="professorId" type="string">
+  UUID of the professor to assign. Must belong to the authenticated user. Pass `null` or omit to remove the assignment.
+</ParamField>
+
+<ParamField body="dayIds" type="number[]" required>
+  Replacement array of day IDs (1=Monday … 7=Sunday). All existing meeting days are replaced. Example: `[2, 4]` for Tuesday and Thursday.
+</ParamField>
+
+## Response
+
+Returns the fully updated section object.
+
+<ResponseField name="id" type="string" required>
+  UUID of the section.
+</ResponseField>
+
+<ResponseField name="startTime" type="string" required>
+  Updated start time as an ISO 8601 timestamp.
+</ResponseField>
+
+<ResponseField name="endTime" type="string" required>
+  Updated end time as an ISO 8601 timestamp.
+</ResponseField>
+
+<ResponseField name="subjectId" type="string" required>
+  UUID of the associated subject.
+</ResponseField>
+
+<ResponseField name="professorId" type="string">
+  UUID of the assigned professor, or `null`.
+</ResponseField>
+
+<ResponseField name="subject" type="object" required>
+  <Expandable title="properties">
+    <ResponseField name="id" type="string">UUID of the subject.</ResponseField>
+    <ResponseField name="name" type="string">Name of the subject.</ResponseField>
+    <ResponseField name="userId" type="string">UUID of the owning user.</ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="professor" type="object">
+  <Expandable title="properties">
+    <ResponseField name="id" type="string">UUID of the professor.</ResponseField>
+    <ResponseField name="fullName" type="string">Full name of the professor.</ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="sectionDays" type="object[]" required>
+  <Expandable title="properties">
+    <ResponseField name="id" type="string">UUID of the section-day record.</ResponseField>
+    <ResponseField name="sectionId" type="string">UUID of the parent section.</ResponseField>
+    <ResponseField name="dayId" type="number">Day identifier (1=Monday … 7=Sunday).</ResponseField>
+    <ResponseField name="day" type="object">
+      <Expandable title="properties">
+        <ResponseField name="id" type="number">Day ID.</ResponseField>
+        <ResponseField name="name" type="string">Day name.</ResponseField>
+      </Expandable>
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Error codes
+
+| Status | Description |
+| ------ | ----------- |
+| `400`  | Validation error — missing or malformed fields. |
+| `401`  | Unauthorized — missing or invalid Bearer token. |
+| `404`  | Section, subject, or professor not found, or does not belong to the authenticated user. |
+
+<RequestExample>
+
+```bash cURL
+curl --request PUT \
+  --url https://api.scheduly.app/api/sections/c3d4e5f6-a7b8-9012-cdef-123456789012 \
+  --header 'Authorization: Bearer <token>' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "startTime": "08:00",
+    "endTime": "10:00",
+    "subjectId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "professorId": "b2c3d4e5-f6a7-8901-bcde-f12345678901",
+    "dayIds": [2, 4]
+  }'
+```
+
+</RequestExample>
+
+<ResponseExample>
+
+```json 200
+{
+  "id": "c3d4e5f6-a7b8-9012-cdef-123456789012",
+  "startTime": "1970-01-01T08:00:00.000Z",
+  "endTime": "1970-01-01T10:00:00.000Z",
+  "subjectId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "professorId": "b2c3d4e5-f6a7-8901-bcde-f12345678901",
+  "subject": {
+    "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "name": "Calculus I",
+    "userId": "d4e5f6a7-b8c9-0123-defa-234567890123"
+  },
+  "professor": {
+    "id": "b2c3d4e5-f6a7-8901-bcde-f12345678901",
+    "fullName": "Dr. Jane Smith"
+  },
+  "sectionDays": [
+    { "id": "c9d0e1f2-a3b4-5678-cdef-789012345678", "sectionId": "c3d4e5f6-a7b8-9012-cdef-123456789012", "dayId": 2, "day": { "id": 2, "name": "Tuesday" } },
+    { "id": "d0e1f2a3-b4c5-6789-defa-890123456789", "sectionId": "c3d4e5f6-a7b8-9012-cdef-123456789012", "dayId": 4, "day": { "id": 4, "name": "Thursday" } }
+  ]
+}
+```
+
+```json 404
+{
+  "statusCode": 404,
+  "message": "Section not found",
+  "error": "Not Found"
+}
+```
+
+</ResponseExample>

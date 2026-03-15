@@ -1,0 +1,57 @@
+---
+title: 'Delete subject'
+description: 'Permanently delete a subject by its ID.'
+---
+
+`DELETE /api/subjects/:id`
+
+Permanently deletes a subject. The subject must belong to the authenticated user. This action cannot be undone.
+
+## Authentication
+
+This endpoint requires a valid Bearer token in the `Authorization` header.
+
+## Request
+
+### Path parameters
+
+<ParamField path="id" type="string" required>
+  The UUID of the subject to delete.
+</ParamField>
+
+## Response
+
+Returns `204 No Content` on success with an empty response body.
+
+## Error codes
+
+| Status | Description |
+| ------ | ----------- |
+| `401 Unauthorized` | Missing or invalid Bearer token. |
+| `404 Not Found` | No subject with the given ID exists for the authenticated user. |
+
+<RequestExample>
+
+```bash cURL
+curl --request DELETE \
+  --url https://api.scheduly.app/api/subjects/a1b2c3d4-e5f6-7890-abcd-ef1234567890 \
+  --header 'Authorization: Bearer <token>'
+```
+
+</RequestExample>
+
+<ResponseExample>
+
+```json 204
+
+```
+
+```json 404
+{
+  "statusCode": 404,
+  "message": "Subject not found",
+  "error": "Not Found"
+}
+```
+
+</ResponseExample>

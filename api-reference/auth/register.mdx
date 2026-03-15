@@ -1,0 +1,103 @@
+---
+title: 'Register'
+description: 'Create a new Scheduly user account.'
+---
+
+`POST /api/auth/register`
+
+Creates a new user account. No authentication is required. If the requested username is already taken, the server returns a `409 Conflict` error.
+
+## Request body
+
+<ParamField body="username" type="string" required>
+  Unique username for the account. Maximum 50 characters.
+</ParamField>
+
+<ParamField body="password" type="string" required>
+  Account password. Minimum 8 characters.
+</ParamField>
+
+<ParamField body="fullName" type="string" required>
+  Full display name of the user. Maximum 100 characters.
+</ParamField>
+
+## Response
+
+Returns the created user object. The `password` field is never included in the response.
+
+<ResponseField name="id" type="string" required>
+  Unique identifier for the user.
+</ResponseField>
+
+<ResponseField name="username" type="string" required>
+  The username chosen during registration.
+</ResponseField>
+
+<ResponseField name="fullName" type="string" required>
+  The full name provided during registration.
+</ResponseField>
+
+<ResponseField name="createdAt" type="string" required>
+  ISO 8601 timestamp of when the account was created.
+</ResponseField>
+
+## Error codes
+
+| Status | Meaning |
+| --- | --- |
+| `400 Bad Request` | One or more request body fields failed validation (e.g., missing field, password too short). |
+| `409 Conflict` | The requested username is already taken. |
+
+<RequestExample>
+
+```bash cURL
+curl --request POST \
+  --url https://api.scheduly.com/api/auth/register \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "username": "jhojanRop",
+    "password": "supersecret",
+    "fullName": "Jhojan Ropero"
+  }'
+```
+
+```json Request body
+{
+  "username": "jhojanRop",
+  "password": "supersecret",
+  "fullName": "Jhojan Ropero"
+}
+```
+
+</RequestExample>
+
+<ResponseExample>
+
+```json 201
+{
+  "id": "clx7k2m0e0000abcd1234efgh",
+  "username": "jhojanRop",
+  "fullName": "Jhojan Ropero",
+  "createdAt": "2026-03-15T10:00:00.000Z"
+}
+```
+
+```json 400
+{
+  "statusCode": 400,
+  "message": [
+    "password must be longer than or equal to 8 characters"
+  ],
+  "error": "Bad Request"
+}
+```
+
+```json 409
+{
+  "statusCode": 409,
+  "message": "Username already taken",
+  "error": "Conflict"
+}
+```
+
+</ResponseExample>

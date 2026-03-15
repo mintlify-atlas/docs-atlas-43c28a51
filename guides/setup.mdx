@@ -1,0 +1,160 @@
+---
+title: "Setup"
+description: "Install and run the Scheduly API on your local machine or server."
+---
+
+This guide walks you through cloning the repository, configuring your environment, setting up the database, and starting the server.
+
+## System requirements
+
+| Requirement | Version |
+| --- | --- |
+| Node.js | 20.x |
+| PostgreSQL | 14 or higher |
+| npm | Bundled with Node.js |
+
+## Installation
+
+<Steps>
+  <Step title="Clone the repository">
+    ```bash
+    git clone https://github.com/JhojanRop/scheduly-api.git
+    cd scheduly-api
+    ```
+  </Step>
+
+  <Step title="Install dependencies">
+    ```bash
+    npm install
+    ```
+  </Step>
+
+  <Step title="Configure environment variables">
+    Create a `.env` file in the root of the project. You can use the provided `.env.example` as a starting point:
+
+    ```bash
+    cp .env.example .env
+    ```
+
+    Then open `.env` and fill in the values:
+
+    ```env
+    DATABASE_URL="postgresql://USER:PASSWORD@localhost:5432/scheduly_db?schema=public"
+    JWT_SECRET="your_jwt_secret_key"
+    NODE_ENV="development"
+    PORT=3000
+    ```
+
+    | Variable | Description |
+    | --- | --- |
+    | `DATABASE_URL` | Full PostgreSQL connection string. Replace `USER`, `PASSWORD`, and the database name as needed. |
+    | `JWT_SECRET` | Secret key used to sign JWT access tokens. Use a long, random string in production. |
+    | `NODE_ENV` | Runtime environment. Use `development` locally and `production` on servers. |
+    | `PORT` | Port the API listens on. Defaults to `3000`. |
+
+    <Warning>
+      Never commit your `.env` file to version control. It contains secrets.
+    </Warning>
+  </Step>
+
+  <Step title="Create the database">
+    Create the PostgreSQL database referenced in your `DATABASE_URL` before running migrations:
+
+    ```bash
+    psql -U postgres -c "CREATE DATABASE scheduly_db;"
+    ```
+
+    <Note>
+      Replace `postgres` with your PostgreSQL superuser if it differs on your system.
+    </Note>
+  </Step>
+
+  <Step title="Run database migrations">
+    Apply the Prisma schema to your database:
+
+    ```bash
+    npx prisma migrate dev
+    ```
+
+    This creates all tables defined in `prisma/schema.prisma`, including `users`, `subjects`, `professors`, `sections`, `rules`, `saved_schedules`, and the join tables.
+  </Step>
+
+  <Step title="Seed initial data">
+    Populate the `days` table with the seven days of the week:
+
+    ```bash
+    npx prisma db seed
+    ```
+
+    The seed script inserts the following records:
+
+    | ID | Name |
+    | --- | --- |
+    | 1 | monday |
+    | 2 | tuesday |
+    | 3 | wednesday |
+    | 4 | thursday |
+    | 5 | friday |
+    | 6 | saturday |
+    | 7 | sunday |
+
+    These IDs are used when creating sections — for example, `dayIds: [1, 3, 5]` means Monday, Wednesday, Friday.
+
+    <Note>
+      The seed script uses `skipDuplicates: true`, so it is safe to run multiple times.
+    </Note>
+  </Step>
+
+  <Step title="Start the server">
+    <CodeGroup>
+
+    ```bash development
+    npm run start:dev
+    ```
+
+    ```bash production
+    npm run build
+    npm run start:prod
+    ```
+
+    </CodeGroup>
+
+    The API is available at `http://localhost:3000/api`.
+  </Step>
+
+  <Step title="Verify the setup">
+    Open the interactive Swagger documentation in your browser:
+
+    ```
+    http://localhost:3000/docs
+    ```
+
+    If you see the Swagger UI with the Scheduly API endpoints listed, the server is running correctly.
+  </Step>
+</Steps>
+
+## Common issues
+
+<AccordionGroup>
+  <Accordion title="Prisma migration fails with connection error">
+    Verify that your `DATABASE_URL` in `.env` is correct and that PostgreSQL is running:
+
+    ```bash
+    psql "postgresql://USER:PASSWORD@localhost:5432/scheduly_db"
+    ```
+
+    If the connection fails, check your PostgreSQL service and credentials.
+  </Accordion>
+
+  <Accordion title="Port 3000 is already in use">
+    Change the `PORT` value in your `.env` file to an available port, such as `3001`. The server reads this variable at startup.
+  </Accordion>
+
+  <Accordion title="Seed command not found or fails">
+    Make sure you have run `npm install` first and that your `.env` file has a valid `DATABASE_URL`. The seed script uses `dotenv/config` to read environment variables.
+  </Accordion>
+
+  <Accordion title="JWT errors on protected routes">
+    Ensure `JWT_SECRET` is set in `.env`. All protected endpoints require a valid Bearer token in the `Authorization` header, obtained by logging in via `POST /api/auth/login`.
+  </Accordion>
+</AccordionGroup>

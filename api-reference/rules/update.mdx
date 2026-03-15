@@ -1,0 +1,121 @@
+---
+title: 'Update rule'
+description: 'Replace the type, priority, and parameters of an existing rule.'
+---
+
+`PUT /api/rules/:id`
+
+Fully replaces the fields of an existing rule. The rule must belong to the authenticated user.
+
+<Info>
+  All requests must include a valid Bearer token in the `Authorization` header.
+</Info>
+
+## Path parameters
+
+<ParamField path="id" type="string" required>
+  UUID of the rule to update.
+</ParamField>
+
+## Request body
+
+<ParamField body="type" type="string" required>
+  The new rule type. Must be one of the 11 supported values: `NO_GAPS`, `NO_EARLY_MORNINGS`, `NO_LATE_EVENINGS`, `PREFER_MORNING`, `PREFER_AFTERNOON`, `COMPACT_DAYS`, `BALANCED_LOAD`, `MIN_FREE_DAY`, `MAX_CONSECUTIVE_HOURS`, `LUNCH_BREAK_PROTECTED`, `AVOID_PROFESSOR`.
+</ParamField>
+
+<ParamField body="priorityOrder" type="number" required>
+  New priority order. Lower values are applied first. Minimum value: `1`.
+</ParamField>
+
+<ParamField body="parameters" type="object">
+  Updated parameters for parameterized rule types. Omit for parameter-free rules.
+
+  **`MIN_FREE_DAY`**:
+  ```json
+  { "type": "daySelect", "value": 5 }
+  ```
+
+  **`MAX_CONSECUTIVE_HOURS`**:
+  ```json
+  { "type": "number", "value": 3 }
+  ```
+
+  **`LUNCH_BREAK_PROTECTED`**:
+  ```json
+  { "type": "timeRange", "value": { "start": "12:00", "end": "14:00" } }
+  ```
+
+  **`AVOID_PROFESSOR`**:
+  ```json
+  { "type": "professorSelect", "value": "b2c3d4e5-f6a7-8901-bcde-f12345678901" }
+  ```
+</ParamField>
+
+## Response
+
+Returns the fully updated rule object.
+
+<ResponseField name="id" type="string" required>
+  UUID of the rule.
+</ResponseField>
+
+<ResponseField name="type" type="string" required>
+  The updated rule type.
+</ResponseField>
+
+<ResponseField name="priorityOrder" type="number" required>
+  The updated priority order.
+</ResponseField>
+
+<ResponseField name="parameters" type="object">
+  The updated parameters object, or `null`.
+</ResponseField>
+
+<ResponseField name="userId" type="string" required>
+  UUID of the user who owns this rule.
+</ResponseField>
+
+## Error codes
+
+| Status | Description |
+| ------ | ----------- |
+| `400`  | Validation error — missing or malformed fields. |
+| `401`  | Unauthorized — missing or invalid Bearer token. |
+| `404`  | Rule not found, or does not belong to the authenticated user. |
+
+<RequestExample>
+
+```bash cURL
+curl --request PUT \
+  --url https://api.scheduly.app/api/rules/e5f6a7b8-c9d0-1234-efab-345678901234 \
+  --header 'Authorization: Bearer <token>' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "type": "NO_EARLY_MORNINGS",
+    "priorityOrder": 1
+  }'
+```
+
+</RequestExample>
+
+<ResponseExample>
+
+```json 200
+{
+  "id": "e5f6a7b8-c9d0-1234-efab-345678901234",
+  "type": "NO_EARLY_MORNINGS",
+  "priorityOrder": 1,
+  "parameters": null,
+  "userId": "d4e5f6a7-b8c9-0123-defa-234567890123"
+}
+```
+
+```json 404
+{
+  "statusCode": 404,
+  "message": "Rule not found",
+  "error": "Not Found"
+}
+```
+
+</ResponseExample>

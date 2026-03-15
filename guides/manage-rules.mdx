@@ -1,0 +1,236 @@
+---
+title: "Manage rules"
+description: "Configure optimization rules to control how the scheduling engine scores and ranks schedule combinations."
+---
+
+Rules define your scheduling preferences. Before generating a schedule, you configure a set of rules — each with a priority — and the engine uses them to score every valid combination of sections.
+
+## How rules work
+
+The engine processes your rules in ascending `priorityOrder`: the rule with order `1` runs first and carries the most influence on the score. Rules with higher numbers run later and have proportionally less weight.
+
+There are two categories of rules:
+
+- **Hard constraints** — Applied in the pruning phase before backtracking. Sections that violate these rules are removed entirely (e.g., `AVOID_PROFESSOR`, `LUNCH_BREAK_PROTECTED`).
+- **Scoring rules** — Applied during backtracking to reward or penalize schedule combinations (e.g., `NO_GAPS`, `COMPACT_DAYS`, `PREFER_MORNING`).
+
+The engine returns up to **three** combinations ordered by total score.
+
+## Available rule types
+
+| Type | Description | Parameters |
+| --- | --- | --- |
+| `NO_GAPS` | Penalizes gaps between classes on the same day. | None |
+| `NO_EARLY_MORNINGS` | Penalizes classes that start before 08:00. | None |
+| `NO_LATE_EVENINGS` | Penalizes classes that end after 18:00. | None |
+| `PREFER_MORNING` | Rewards classes scheduled between 06:00 and 14:00. | None |
+| `PREFER_AFTERNOON` | Rewards classes scheduled between 14:00 and 22:00. | None |
+| `COMPACT_DAYS` | Rewards schedules that use fewer days per week. | None |
+| `BALANCED_LOAD` | Rewards schedules that distribute hours evenly across days. | None |
+| `MIN_FREE_DAY` | Rewards having at least one completely free day. | `{ type: "daySelect", value: 1–7 }` |
+| `MAX_CONSECUTIVE_HOURS` | Penalizes blocks of consecutive class hours above the limit. | `{ type: "number", value: 1–8 }` |
+| `LUNCH_BREAK_PROTECTED` | Removes sections that overlap the specified time range. | `{ type: "timeRange", value: { start: "HH:MM", end: "HH:MM" } }` |
+| `AVOID_PROFESSOR` | Removes all sections taught by the specified professor. | `{ type: "professorSelect", value: "<professor-uuid>" }` |
+
+## Setting up a typical rule configuration
+
+The following steps build a complete rule set. Replace `<accessToken>` with your JWT and adjust values to match your preferences.
+
+<Steps>
+  <Step title="Add NO_GAPS at priority 1">
+    This rule penalizes dead time between classes on the same day. Setting it at priority 1 gives it the highest influence.
+
+    ```bash
+    curl -X POST http://localhost:3000/api/rules \
+      -H "Content-Type: application/json" \
+      -H "Authorization: Bearer <accessToken>" \
+      -d '{
+        "type": "NO_GAPS",
+        "priorityOrder": 1
+      }'
+    ```
+
+    Response:
+
+    ```json
+    {
+      "id": "11111111-1111-1111-1111-111111111111",
+      "type": "NO_GAPS",
+      "priorityOrder": 1,
+      "parameters": null,
+      "userId": "..."
+    }
+    ```
+  </Step>
+
+  <Step title="Add COMPACT_DAYS at priority 2">
+    Rewards schedules that fit all classes into fewer days, leaving more full free days.
+
+    ```bash
+    curl -X POST http://localhost:3000/api/rules \
+      -H "Content-Type: application/json" \
+      -H "Authorization: Bearer <accessToken>" \
+      -d '{
+        "type": "COMPACT_DAYS",
+        "priorityOrder": 2
+      }'
+    ```
+  </Step>
+
+  <Step title="Add PREFER_MORNING at priority 3">
+    Rewards sections that fall between 06:00 and 14:00. Combine with `COMPACT_DAYS` to favor early, dense schedules.
+
+    ```bash
+    curl -X POST http://localhost:3000/api/rules \
+      -H "Content-Type: application/json" \
+      -H "Authorization: Bearer <accessToken>" \
+      -d '{
+        "type": "PREFER_MORNING",
+        "priorityOrder": 3
+      }'
+    ```
+  </Step>
+
+  <Step title="Add LUNCH_BREAK_PROTECTED at priority 4">
+    Removes any section that overlaps the specified time range before backtracking begins. Use this to protect your lunch hour.
+
+    ```bash
+    curl -X POST http://localhost:3000/api/rules \
+      -H "Content-Type: application/json" \
+      -H "Authorization: Bearer <accessToken>" \
+      -d '{
+        "type": "LUNCH_BREAK_PROTECTED",
+        "priorityOrder": 4,
+        "parameters": {
+          "type": "timeRange",
+          "value": {
+            "start": "12:00",
+            "end": "14:00"
+          }
+        }
+      }'
+    ```
+
+    <Note>
+      `LUNCH_BREAK_PROTECTED` is a hard constraint. Sections overlapping the time range are excluded entirely, not just penalized. If no sections remain for a subject after pruning, the generate request will fail.
+    </Note>
+  </Step>
+
+  <Step title="Add AVOID_PROFESSOR at priority 5">
+    Excludes all sections taught by a specific professor. Set the `value` to the professor's UUID.
+
+    ```bash
+    curl -X POST http://localhost:3000/api/rules \
+      -H "Content-Type: application/json" \
+      -H "Authorization: Bearer <accessToken>" \
+      -d '{
+        "type": "AVOID_PROFESSOR",
+        "priorityOrder": 5,
+        "parameters": {
+          "type": "professorSelect",
+          "value": "f7e8d9c0-b1a2-3456-7890-abcdef123456"
+        }
+      }'
+    ```
+
+    <Note>
+      Like `LUNCH_BREAK_PROTECTED`, this rule operates in the pruning phase and removes sections before any scoring takes place.
+    </Note>
+  </Step>
+
+  <Step title="Add MAX_CONSECUTIVE_HOURS at priority 6">
+    Penalizes combinations where a student has more consecutive class hours than the specified limit. Set `value` to the maximum number of consecutive hours you want to allow.
+
+    ```bash
+    curl -X POST http://localhost:3000/api/rules \
+      -H "Content-Type: application/json" \
+      -H "Authorization: Bearer <accessToken>" \
+      -d '{
+        "type": "MAX_CONSECUTIVE_HOURS",
+        "priorityOrder": 6,
+        "parameters": {
+          "type": "number",
+          "value": 3
+        }
+      }'
+    ```
+  </Step>
+</Steps>
+
+## Reorder rules
+
+To change a rule's priority, send a `PUT` request to `/api/rules/:id` with the updated `priorityOrder`. You can also change the rule `type` in the same request.
+
+```bash
+curl -X PUT http://localhost:3000/api/rules/11111111-1111-1111-1111-111111111111 \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <accessToken>" \
+  -d '{
+    "type": "NO_GAPS",
+    "priorityOrder": 2
+  }'
+```
+
+<Warning>
+  `priorityOrder` values are not automatically renumbered. If you update one rule's order to a value already held by another rule, both rules will share that priority. Use `GET /api/rules` to review your current configuration after making changes.
+</Warning>
+
+## List your rules
+
+Retrieve all your rules sorted by `priorityOrder` ascending:
+
+```bash
+curl http://localhost:3000/api/rules \
+  -H "Authorization: Bearer <accessToken>"
+```
+
+Response:
+
+```json
+[
+  { "id": "...", "type": "NO_GAPS", "priorityOrder": 1, "parameters": null },
+  { "id": "...", "type": "COMPACT_DAYS", "priorityOrder": 2, "parameters": null },
+  { "id": "...", "type": "PREFER_MORNING", "priorityOrder": 3, "parameters": null },
+  {
+    "id": "...",
+    "type": "LUNCH_BREAK_PROTECTED",
+    "priorityOrder": 4,
+    "parameters": { "type": "timeRange", "value": { "start": "12:00", "end": "14:00" } }
+  },
+  {
+    "id": "...",
+    "type": "AVOID_PROFESSOR",
+    "priorityOrder": 5,
+    "parameters": { "type": "professorSelect", "value": "f7e8d9c0-b1a2-3456-7890-abcdef123456" }
+  },
+  {
+    "id": "...",
+    "type": "MAX_CONSECUTIVE_HOURS",
+    "priorityOrder": 6,
+    "parameters": { "type": "number", "value": 3 }
+  }
+]
+```
+
+## Delete a rule
+
+Send a `DELETE` request to `/api/rules/:id`. A successful deletion returns `204 No Content`.
+
+```bash
+curl -X DELETE http://localhost:3000/api/rules/11111111-1111-1111-1111-111111111111 \
+  -H "Authorization: Bearer <accessToken>"
+```
+
+## Tips for best results
+
+<Tip>
+  Start with one or two high-priority scoring rules (e.g., `NO_GAPS`, `COMPACT_DAYS`) and generate a schedule. Add more rules gradually and regenerate to see how each one shifts the ranking.
+</Tip>
+
+<Tip>
+  Hard constraint rules (`AVOID_PROFESSOR`, `LUNCH_BREAK_PROTECTED`) should be added with a lower `priorityOrder` number only if they are your most critical requirements. Because they eliminate sections entirely before scoring starts, a mis-configured constraint can cause the generate request to fail if too many sections are pruned.
+</Tip>
+
+<Tip>
+  Avoid conflicting preferences. For example, using both `PREFER_MORNING` and `PREFER_AFTERNOON` at the same time will cancel out their effects. Pick the one that matches your actual preference.
+</Tip>

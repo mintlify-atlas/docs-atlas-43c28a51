@@ -1,0 +1,65 @@
+---
+title: 'Delete a saved schedule'
+description: 'Permanently delete a saved schedule and all its section associations.'
+---
+
+`DELETE /api/saved-schedules/:id`
+
+Permanently deletes the saved schedule and all associated `ScheduleSection` join records. Returns no content on success.
+
+## Authentication
+
+Requires a valid Bearer token in the `Authorization` header.
+
+<ParamField header="Authorization" type="string" required>
+  Bearer token obtained from the login endpoint. Format: `Bearer <token>`.
+</ParamField>
+
+## Path parameters
+
+<ParamField path="id" type="string" required>
+  UUID of the saved schedule to delete.
+</ParamField>
+
+## Response
+
+Returns `204 No Content` on success. The response body is empty.
+
+## Error codes
+
+| Status | Description |
+| ------ | ----------- |
+| `401`  | Missing or invalid Bearer token. |
+| `404`  | No saved schedule with the given ID exists for the authenticated user. |
+
+<RequestExample>
+
+```bash cURL
+curl --request DELETE \
+  --url https://api.scheduly.app/api/saved-schedules/1a2b3c4d-5e6f-7890-abcd-ef1234567890 \
+  --header 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...'
+```
+
+</RequestExample>
+
+<ResponseExample>
+
+```json 204
+```
+
+```json 404
+{
+  "statusCode": 404,
+  "message": "Saved schedule not found",
+  "error": "Not Found"
+}
+```
+
+```json 401
+{
+  "statusCode": 401,
+  "message": "Unauthorized"
+}
+```
+
+</ResponseExample>

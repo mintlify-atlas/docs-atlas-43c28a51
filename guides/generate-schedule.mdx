@@ -1,0 +1,256 @@
+---
+title: "Generate a schedule"
+description: "End-to-end walkthrough: create subjects, professors, and sections, then call the scheduling engine to get optimized schedule options."
+---
+
+The scheduling engine takes a list of subject IDs and returns up to three optimized schedule combinations, ranked by score. This guide walks through every step from a blank account to a generated schedule.
+
+## Prerequisites
+
+- The API server is running. See [Setup](/guides/setup).
+- You have a registered account. If not, register first:
+
+```bash
+curl -X POST http://localhost:3000/api/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "jhojanRop",
+    "password": "12345678",
+    "fullName": "Jhojan Ropero"
+  }'
+```
+
+<Steps>
+  <Step title="Authenticate and get an access token">
+    Log in to receive a JWT access token. The refresh token is set as an `HttpOnly` cookie automatically.
+
+    ```bash
+    curl -X POST http://localhost:3000/api/auth/login \
+      -H "Content-Type: application/json" \
+      -c cookies.txt \
+      -d '{
+        "username": "jhojanRop",
+        "password": "12345678"
+      }'
+    ```
+
+    Response:
+
+    ```json
+    {
+      "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+    }
+    ```
+
+    Save the `accessToken` value. Include it in every subsequent request as a Bearer token:
+
+    ```
+    Authorization: Bearer <accessToken>
+    ```
+
+    <Note>
+      The `-c cookies.txt` flag saves the `refreshToken` cookie for later use with `POST /api/auth/refresh`. You do not need to manage the refresh token manually for this guide.
+    </Note>
+  </Step>
+
+  <Step title="Create subjects">
+    A subject represents a course (e.g., Mathematics, Physics). Create one subject per course you want to schedule.
+
+    ```bash
+    curl -X POST http://localhost:3000/api/subjects \
+      -H "Content-Type: application/json" \
+      -H "Authorization: Bearer <accessToken>" \
+      -d '{"name": "Mathematics"}'
+    ```
+
+    Response:
+
+    ```json
+    {
+      "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+      "name": "Mathematics",
+      "userId": "..."
+    }
+    ```
+
+    Repeat for each subject. Save each `id` — you will need the subject IDs later.
+
+    ```bash
+    curl -X POST http://localhost:3000/api/subjects \
+      -H "Content-Type: application/json" \
+      -H "Authorization: Bearer <accessToken>" \
+      -d '{"name": "Physics"}'
+    ```
+  </Step>
+
+  <Step title="Create professors">
+    A professor has a `fullName` field. The `professorId` is optional when creating sections, but required if you want to use the `AVOID_PROFESSOR` rule.
+
+    ```bash
+    curl -X POST http://localhost:3000/api/professors \
+      -H "Content-Type: application/json" \
+      -H "Authorization: Bearer <accessToken>" \
+      -d '{"fullName": "Juan Pérez"}'
+    ```
+
+    Response:
+
+    ```json
+    {
+      "id": "f7e8d9c0-b1a2-3456-7890-abcdef123456",
+      "fullName": "Juan Pérez",
+      "userId": "..."
+    }
+    ```
+
+    Save each professor's `id`.
+  </Step>
+
+  <Step title="Create sections with time slots and days">
+    A section represents one specific class offering of a subject: a start time, end time, optional professor, and the days it meets.
+
+    **Section fields:**
+
+    | Field | Type | Required | Description |
+    | --- | --- | --- | --- |
+    | `startTime` | string | Yes | Start time in `HH:MM` 24-hour format (e.g., `"07:00"`). |
+    | `endTime` | string | Yes | End time in `HH:MM` 24-hour format (e.g., `"09:00"`). |
+    | `subjectId` | UUID | Yes | ID of the subject this section belongs to. |
+    | `professorId` | UUID | No | ID of the professor teaching this section. |
+    | `dayIds` | number[] | Yes | Array of day IDs (1=Monday through 7=Sunday). |
+
+    Create a section for Mathematics that meets Monday, Wednesday, and Friday from 07:00 to 09:00:
+
+    ```bash
+    curl -X POST http://localhost:3000/api/sections \
+      -H "Content-Type: application/json" \
+      -H "Authorization: Bearer <accessToken>" \
+      -d '{
+        "startTime": "07:00",
+        "endTime": "09:00",
+        "subjectId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+        "professorId": "f7e8d9c0-b1a2-3456-7890-abcdef123456",
+        "dayIds": [1, 3, 5]
+      }'
+    ```
+
+    Create a second section for the same subject that meets Tuesday and Thursday from 10:00 to 12:00, giving the engine an alternative to choose from:
+
+    ```bash
+    curl -X POST http://localhost:3000/api/sections \
+      -H "Content-Type: application/json" \
+      -H "Authorization: Bearer <accessToken>" \
+      -d '{
+        "startTime": "10:00",
+        "endTime": "12:00",
+        "subjectId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+        "dayIds": [2, 4]
+      }'
+    ```
+
+    Repeat for every subject you want to schedule. The engine requires at least one section per subject.
+
+    <Tip>
+      Create multiple sections per subject whenever possible. More options give the engine more combinations to evaluate and a better chance of finding a high-scoring schedule.
+    </Tip>
+  </Step>
+
+  <Step title="Generate the schedule">
+    Call `POST /api/scheduling/generate` with the list of subject IDs you want to include in the schedule.
+
+    ```bash
+    curl -X POST http://localhost:3000/api/scheduling/generate \
+      -H "Content-Type: application/json" \
+      -H "Authorization: Bearer <accessToken>" \
+      -d '{
+        "subjectIds": [
+          "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+          "b2c3d4e5-f6a7-8901-bcde-f12345678901"
+        ]
+      }'
+    ```
+
+    The engine loads your configured rules (ordered by `priorityOrder`), filters out sections that violate absolute constraints (pruning phase), then runs backtracking across all valid combinations to score each one.
+
+    <Warning>
+      Every subject ID in the request must have at least one section. If any subject has no sections, the request returns a `400 Bad Request` error.
+    </Warning>
+  </Step>
+
+  <Step title="Interpret the response">
+    The engine returns an array of up to three schedule combinations, sorted from best to worst score.
+
+    ```json
+    [
+      {
+        "rank": 1,
+        "score": 8.75,
+        "sections": [
+          {
+            "sectionId": "c3d4e5f6-a7b8-9012-cdef-123456789012",
+            "subject": "Mathematics",
+            "professor": "Juan Pérez",
+            "startTime": "07:00",
+            "endTime": "09:00",
+            "days": ["monday", "wednesday", "friday"]
+          },
+          {
+            "sectionId": "d4e5f6a7-b8c9-0123-defa-234567890123",
+            "subject": "Physics",
+            "professor": null,
+            "startTime": "09:00",
+            "endTime": "11:00",
+            "days": ["tuesday", "thursday"]
+          }
+        ]
+      },
+      {
+        "rank": 2,
+        "score": 6.50,
+        "sections": [...]
+      },
+      {
+        "rank": 3,
+        "score": 4.25,
+        "sections": [...]
+      }
+    ]
+    ```
+
+    **Response fields:**
+
+    | Field | Description |
+    | --- | --- |
+    | `rank` | Position in the ranking (1 = best score). |
+    | `score` | Numeric score calculated from your rules. Higher is better. |
+    | `sections[].sectionId` | UUID of the section. Use this to save the schedule. |
+    | `sections[].subject` | Name of the subject. |
+    | `sections[].professor` | Full name of the professor, or `null` if none assigned. |
+    | `sections[].startTime` | Start time in `HH:MM` format. |
+    | `sections[].endTime` | End time in `HH:MM` format. |
+    | `sections[].days` | Array of day names (e.g., `"monday"`, `"wednesday"`). |
+  </Step>
+
+  <Step title="Save the preferred schedule">
+    Once you have chosen a schedule, save it by sending the `sectionId` values from your preferred result to `POST /api/saved-schedules`.
+
+    ```bash
+    curl -X POST http://localhost:3000/api/saved-schedules \
+      -H "Content-Type: application/json" \
+      -H "Authorization: Bearer <accessToken>" \
+      -d '{
+        "name": "My ideal schedule",
+        "sectionIds": [
+          "c3d4e5f6-a7b8-9012-cdef-123456789012",
+          "d4e5f6a7-b8c9-0123-defa-234567890123"
+        ]
+      }'
+    ```
+
+    The `name` field is a label you choose (maximum 50 characters). The `sectionIds` are the `sectionId` values from the sections in your chosen schedule.
+  </Step>
+</Steps>
+
+## Next steps
+
+To improve schedule quality, configure optimization rules before generating. Rules tell the engine what to prefer or avoid — for example, no gaps between classes, morning preference, or a protected lunch window. See [Manage rules](/guides/manage-rules).

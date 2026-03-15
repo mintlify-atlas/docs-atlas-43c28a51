@@ -1,0 +1,79 @@
+---
+title: 'Get rule'
+description: 'Retrieve a single optimization rule by its ID.'
+---
+
+`GET /api/rules/:id`
+
+Returns a single rule by its UUID. The rule must belong to the authenticated user.
+
+<Info>
+  All requests must include a valid Bearer token in the `Authorization` header.
+</Info>
+
+## Path parameters
+
+<ParamField path="id" type="string" required>
+  UUID of the rule to retrieve.
+</ParamField>
+
+## Response
+
+<ResponseField name="id" type="string" required>
+  Unique identifier (UUID) of the rule.
+</ResponseField>
+
+<ResponseField name="type" type="string" required>
+  The rule type, e.g. `"COMPACT_DAYS"`.
+</ResponseField>
+
+<ResponseField name="priorityOrder" type="number" required>
+  Priority order of the rule.
+</ResponseField>
+
+<ResponseField name="parameters" type="object">
+  Parameters object for parameterized rules, or `null`.
+</ResponseField>
+
+<ResponseField name="userId" type="string" required>
+  UUID of the user who owns this rule.
+</ResponseField>
+
+## Error codes
+
+| Status | Description |
+| ------ | ----------- |
+| `401`  | Unauthorized — missing or invalid Bearer token. |
+| `404`  | Rule not found, or does not belong to the authenticated user. |
+
+<RequestExample>
+
+```bash cURL
+curl --request GET \
+  --url https://api.scheduly.app/api/rules/e5f6a7b8-c9d0-1234-efab-345678901234 \
+  --header 'Authorization: Bearer <token>'
+```
+
+</RequestExample>
+
+<ResponseExample>
+
+```json 200
+{
+  "id": "e5f6a7b8-c9d0-1234-efab-345678901234",
+  "type": "NO_GAPS",
+  "priorityOrder": 1,
+  "parameters": null,
+  "userId": "d4e5f6a7-b8c9-0123-defa-234567890123"
+}
+```
+
+```json 404
+{
+  "statusCode": 404,
+  "message": "Rule not found",
+  "error": "Not Found"
+}
+```
+
+</ResponseExample>

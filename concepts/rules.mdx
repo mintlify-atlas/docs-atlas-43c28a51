@@ -1,0 +1,281 @@
+---
+title: Rules
+description: All 11 optimization rule types, their parameters, scoring behavior, and how priority order affects the final score.
+---
+
+Rules express your scheduling preferences. When you call `POST /api/scheduling/generate`, the engine applies your rules in two ways:
+
+- **Hard constraints** (Pruning phase): `AVOID_PROFESSOR` and `LUNCH_BREAK_PROTECTED` remove ineligible sections before the search begins.
+- **Soft constraints** (Scoring phase): all 11 rules contribute a weighted numeric score to each candidate combination. Higher-priority rules have more influence.
+
+## Priority ordering
+
+Every rule has a `priorityOrder` integer (minimum `1`). The scoring weight for a rule is:
+
+```
+weight = 100 / priorityOrder
+```
+
+A rule with `priorityOrder: 1` contributes up to **100 points**. A rule with `priorityOrder: 5` contributes up to **20 points**. When two rules conflict in preference, the lower `priorityOrder` number always wins.
+
+<Tip>
+  Assign `priorityOrder: 1` to the rule that matters most to you. You can assign the same `priorityOrder` to multiple rules — they will have equal weight.
+</Tip>
+
+## Rule overview
+
+| Rule type | Parameters | Hard constraint | Description |
+|-----------|-----------|-----------------|-------------|
+| `NO_GAPS` | None | No | Penalizes idle gaps between classes on the same day |
+| `NO_EARLY_MORNINGS` | None | No | Penalizes sections starting before 08:00 |
+| `NO_LATE_EVENINGS` | None | No | Penalizes sections ending after 18:00 |
+| `PREFER_MORNING` | None | No | Rewards schedules concentrated in the morning (06:00–14:00) |
+| `PREFER_AFTERNOON` | None | No | Rewards schedules concentrated in the afternoon (14:00–22:00) |
+| `COMPACT_DAYS` | None | No | Rewards using fewer days per week |
+| `BALANCED_LOAD` | None | No | Rewards even distribution of hours across days |
+| `MIN_FREE_DAY` | `daySelect` (optional) | No | Rewards having at least one free day; bonus if the preferred day is free |
+| `MAX_CONSECUTIVE_HOURS` | `number` (required, 1–8) | No | Penalizes consecutive class blocks longer than the specified limit |
+| `LUNCH_BREAK_PROTECTED` | `timeRange` (required) | **Yes** | Removes sections overlapping the protected time window; also scores positively |
+| `AVOID_PROFESSOR` | `professorSelect` (required) | **Yes** | Removes all sections by the specified professor |
+
+## Creating a rule
+
+Send a `POST /api/rules` request with the following body:
+
+```json
+{
+  "type": "NO_GAPS",
+  "priorityOrder": 1,
+  "parameters": null
+}
+```
+
+The `parameters` field shape depends on the rule type. See the detail sections below.
+
+## Rule details
+
+<AccordionGroup>
+  <Accordion title="NO_GAPS — avoid idle time between classes">
+    Penalizes schedules that have gaps between consecutive classes on the same day. For each gap, the score is reduced by `0.25` per gap-hour. A schedule with no gaps scores `1.0`.
+
+    **Parameters:** None
+
+    **Score formula:** `totalGapHours === 0 ? 1 : max(0, 1 - totalGapHours × 0.25)`
+
+    ```json example request body
+    {
+      "type": "NO_GAPS",
+      "priorityOrder": 1,
+      "parameters": null
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="NO_EARLY_MORNINGS — avoid classes before 08:00">
+    Penalizes sections that start before 08:00. Each early-morning section reduces the score by `0.33`. A schedule with no early sections scores `1.0`.
+
+    **Parameters:** None
+
+    **Score formula:** `earlyCount === 0 ? 1 : max(0, 1 - earlyCount × 0.33)`
+
+    ```json example request body
+    {
+      "type": "NO_EARLY_MORNINGS",
+      "priorityOrder": 2,
+      "parameters": null
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="NO_LATE_EVENINGS — avoid classes ending after 18:00">
+    Penalizes sections that end after 18:00. Each late section reduces the score by `0.33`. A schedule with no late sections scores `1.0`.
+
+    **Parameters:** None
+
+    **Score formula:** `lateCount === 0 ? 1 : max(0, 1 - lateCount × 0.33)`
+
+    ```json example request body
+    {
+      "type": "NO_LATE_EVENINGS",
+      "priorityOrder": 2,
+      "parameters": null
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="PREFER_MORNING — concentrate classes in the morning">
+    Rewards schedules where more sections start in the morning window (06:00–14:00). The score is the proportion of sections that start in that window.
+
+    **Parameters:** None
+
+    **Score formula:** `morningCount / totalSections`
+
+    ```json example request body
+    {
+      "type": "PREFER_MORNING",
+      "priorityOrder": 1,
+      "parameters": null
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="PREFER_AFTERNOON — concentrate classes in the afternoon">
+    Rewards schedules where more sections start in the afternoon window (14:00–22:00). The score is the proportion of sections that start in that window.
+
+    **Parameters:** None
+
+    **Score formula:** `afternoonCount / totalSections`
+
+    ```json example request body
+    {
+      "type": "PREFER_AFTERNOON",
+      "priorityOrder": 1,
+      "parameters": null
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="COMPACT_DAYS — minimize days with classes">
+    Rewards schedules that use fewer days per week. The score decreases by `0.17` for each additional day beyond the first.
+
+    **Parameters:** None
+
+    **Score formula:** `max(0, 1 - (totalDaysUsed - 1) × 0.17)`
+
+    ```json example request body
+    {
+      "type": "COMPACT_DAYS",
+      "priorityOrder": 3,
+      "parameters": null
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="BALANCED_LOAD — distribute hours evenly across days">
+    Rewards schedules where class hours are evenly spread. The score is derived from the standard deviation of hours per day: `max(0, 1 - stdDev × 0.2)`. Lower variance yields a higher score.
+
+    **Parameters:** None
+
+    **Score formula:** `max(0, 1 - stdDev(hoursPerDay) × 0.2)`
+
+    ```json example request body
+    {
+      "type": "BALANCED_LOAD",
+      "priorityOrder": 3,
+      "parameters": null
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="MIN_FREE_DAY — ensure at least one free day">
+    Rewards schedules that leave at least one day of the week free. If you specify a preferred free day (by day ID 1–7), a full score of `1.0` is awarded when that exact day is free. If the preferred day is not free but other days are, a partial score is given.
+
+    **Parameters:** `daySelect` (optional) — the preferred free day as an integer (1 = Monday … 7 = Sunday).
+
+    **Score logic:**
+    - Zero free days → `0`
+    - Preferred day is free → `1.0`
+    - Preferred day not free, but others are → `min(0.7, freeDays × 0.2)`
+    - No parameter set → `min(1, freeDays × 0.33)`
+
+    ```json preferred free day (Wednesday = 3)
+    {
+      "type": "MIN_FREE_DAY",
+      "priorityOrder": 2,
+      "parameters": {
+        "type": "daySelect",
+        "value": 3
+      }
+    }
+    ```
+
+    ```json no preference
+    {
+      "type": "MIN_FREE_DAY",
+      "priorityOrder": 2,
+      "parameters": null
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="MAX_CONSECUTIVE_HOURS — limit back-to-back class hours">
+    Penalizes consecutive class blocks (no gap between sections) that exceed the specified maximum. Each violation reduces the score by `0.33`. A schedule with no violations scores `1.0`.
+
+    If no parameter is provided, the default maximum is **4 hours**.
+
+    **Parameters:** `number` (required) — maximum consecutive hours, between `1` and `8`.
+
+    **Score formula:** `violations === 0 ? 1 : max(0, 1 - violations × 0.33)`
+
+    ```json limit to 3 consecutive hours
+    {
+      "type": "MAX_CONSECUTIVE_HOURS",
+      "priorityOrder": 1,
+      "parameters": {
+        "type": "number",
+        "value": 3
+      }
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="LUNCH_BREAK_PROTECTED — reserve a lunch window (hard constraint)">
+    This rule acts as both a **hard constraint** and a **soft constraint**.
+
+    - **Pruning phase:** any section whose time range overlaps the protected window is removed from consideration entirely.
+    - **Scoring phase:** if any section in a combination still overlaps the window (which can only happen if the rule has no parameter and falls back to defaults), the score is reduced by `0.5` per violation.
+
+    **Parameters:** `timeRange` (required) — `start` and `end` times in `HH:MM` format.
+
+    **Default window (when no parameter):** 12:00–14:00.
+
+    **Score formula:** `violations === 0 ? 1 : max(0, 1 - violations × 0.5)`
+
+    ```json protect 12:00–14:00
+    {
+      "type": "LUNCH_BREAK_PROTECTED",
+      "priorityOrder": 1,
+      "parameters": {
+        "type": "timeRange",
+        "value": {
+          "start": "12:00",
+          "end": "14:00"
+        }
+      }
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="AVOID_PROFESSOR — exclude a specific professor (hard constraint)">
+    This rule acts as both a **hard constraint** and a **soft constraint**.
+
+    - **Pruning phase:** every section taught by the specified professor is removed before backtracking begins.
+    - **Scoring phase:** if a combination somehow includes that professor (edge case with no parameter), the score is `0`; otherwise `1.0`.
+
+    **Parameters:** `professorSelect` (required) — the UUID of the professor to avoid.
+
+    ```json avoid a specific professor
+    {
+      "type": "AVOID_PROFESSOR",
+      "priorityOrder": 1,
+      "parameters": {
+        "type": "professorSelect",
+        "value": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+      }
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Parameter types reference
+
+The `parameters` field of a rule is a JSON object matching one of these shapes:
+
+| Parameter type | JSON `type` value | `value` shape |
+|----------------|-------------------|---------------|
+| Number | `"number"` | integer between `1` and `8` |
+| Time range | `"timeRange"` | `{ "start": "HH:MM", "end": "HH:MM" }` |
+| Day select | `"daySelect"` | integer `1`–`7` (1 = Monday, 7 = Sunday) |
+| Professor select | `"professorSelect"` | UUID string of the professor |
+
+Rules with no parameters should omit the `parameters` field or set it to `null`.

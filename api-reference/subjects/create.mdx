@@ -1,0 +1,69 @@
+---
+title: 'Create subject'
+description: 'Create a new subject for the authenticated user.'
+---
+
+`POST /api/subjects`
+
+Creates a new subject associated with the authenticated user's account.
+
+## Authentication
+
+This endpoint requires a valid Bearer token in the `Authorization` header.
+
+## Request
+
+### Body parameters
+
+<ParamField body="name" type="string" required>
+  The name of the subject. Maximum 100 characters.
+</ParamField>
+
+## Response
+
+Returns the created subject object.
+
+<ResponseField name="id" type="string" required>
+  Unique identifier for the subject (UUID).
+</ResponseField>
+
+<ResponseField name="name" type="string" required>
+  The name of the subject.
+</ResponseField>
+
+<ResponseField name="userId" type="string" required>
+  The ID of the user who owns this subject.
+</ResponseField>
+
+## Error codes
+
+| Status | Description |
+| ------ | ----------- |
+| `401 Unauthorized` | Missing or invalid Bearer token. |
+| `400 Bad Request` | Request body is missing required fields or fails validation. |
+
+<RequestExample>
+
+```bash cURL
+curl --request POST \
+  --url https://api.scheduly.app/api/subjects \
+  --header 'Authorization: Bearer <token>' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "name": "Matemáticas"
+  }'
+```
+
+</RequestExample>
+
+<ResponseExample>
+
+```json 201
+{
+  "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "name": "Matemáticas",
+  "userId": "f1e2d3c4-b5a6-7890-fedc-ba9876543210"
+}
+```
+
+</ResponseExample>

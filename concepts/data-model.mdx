@@ -1,0 +1,352 @@
+---
+title: Data model
+description: The full Prisma schema for Scheduly API — models, fields, relationships, and how user data isolation works.
+---
+
+All data in Scheduly API is stored in PostgreSQL using Prisma ORM. Every user-owned resource includes a `userId` foreign key, so all queries are scoped to the authenticated user's data. No user can access another user's subjects, professors, rules, or saved schedules.
+
+## Entity relationships
+
+```
+User
+ ├── Subject[]          (one-to-many, cascade delete)
+ │    └── Section[]     (one-to-many, cascade delete)
+ │         ├── SectionDay[]        (one-to-many, cascade delete)
+ │         └── ScheduleSection[]   (many-to-many join)
+ ├── Professor[]        (one-to-many, cascade delete)
+ │    └── Section[]     (one-to-many, set null on professor delete)
+ ├── Rule[]             (one-to-many, cascade delete)
+ └── SavedSchedule[]    (one-to-many, cascade delete)
+      └── ScheduleSection[]  (many-to-many join, cascade delete)
+```
+
+Sections belong to a subject and optionally to a professor. `SectionDay` links a section to one or more days of the week. `ScheduleSection` is the join table between a `SavedSchedule` and the `Section` records it contains.
+
+<Note>
+  `Day` is a static lookup table seeded on first run (1–7, Monday–Sunday). It is not user-owned and is shared across all users.
+</Note>
+
+## Models
+
+### User
+
+The root resource. Every other user-owned model references `User.id`.
+
+<ResponseField name="id" type="string" required>
+  UUID primary key, auto-generated.
+</ResponseField>
+
+<ResponseField name="username" type="string" required>
+  Unique username, maximum 50 characters. Used for login.
+</ResponseField>
+
+<ResponseField name="password" type="string" required>
+  Hashed password. Never returned in API responses.
+</ResponseField>
+
+<ResponseField name="fullName" type="string" required>
+  Display name, maximum 100 characters. Maps to column `full_name`.
+</ResponseField>
+
+<ResponseField name="createdAt" type="DateTime" required>
+  Timestamp with timezone, set automatically on creation. Maps to column `created_at`.
+</ResponseField>
+
+---
+
+### Subject
+
+Represents a course or class that the student wants to schedule. A subject owns one or more sections.
+
+<ResponseField name="id" type="string" required>
+  UUID primary key, auto-generated.
+</ResponseField>
+
+<ResponseField name="name" type="string" required>
+  Subject name, maximum 100 characters.
+</ResponseField>
+
+<ResponseField name="userId" type="string" required>
+  Foreign key to `User.id`. Scopes the subject to its owner. Cascade deletes on user deletion. Maps to column `user_id`.
+</ResponseField>
+
+---
+
+### Professor
+
+Represents an instructor. Sections are optionally linked to a professor. A professor's `userId` is nullable to allow system-level professors in future use cases.
+
+<ResponseField name="id" type="string" required>
+  UUID primary key, auto-generated.
+</ResponseField>
+
+<ResponseField name="fullName" type="string" required>
+  Full name of the professor, maximum 100 characters. Maps to column `full_name`.
+</ResponseField>
+
+<ResponseField name="userId" type="string">
+  Nullable foreign key to `User.id`. Cascade deletes on user deletion. Maps to column `user_id`.
+</ResponseField>
+
+---
+
+### Section
+
+A specific time slot for a subject — one subject can have multiple sections at different times. The scheduling engine selects one section per subject.
+
+<ResponseField name="id" type="string" required>
+  UUID primary key, auto-generated.
+</ResponseField>
+
+<ResponseField name="startTime" type="DateTime" required>
+  Section start time stored as a time-with-timezone (`Timetz`). Only the time component is used. Maps to column `start_time`.
+</ResponseField>
+
+<ResponseField name="endTime" type="DateTime" required>
+  Section end time stored as a time-with-timezone (`Timetz`). Only the time component is used. Maps to column `end_time`.
+</ResponseField>
+
+<ResponseField name="subjectId" type="string" required>
+  Foreign key to `Subject.id`. Cascade deletes when the subject is deleted. Maps to column `subject_id`.
+</ResponseField>
+
+<ResponseField name="professorId" type="string">
+  Nullable foreign key to `Professor.id`. Set to `null` if the professor is deleted. Maps to column `professor_id`.
+</ResponseField>
+
+---
+
+### SectionDay
+
+Join table that associates a section with one or more days of the week. A section with classes on Monday and Wednesday has two `SectionDay` records.
+
+<ResponseField name="id" type="string" required>
+  UUID primary key, auto-generated.
+</ResponseField>
+
+<ResponseField name="sectionId" type="string" required>
+  Foreign key to `Section.id`. Cascade deletes when the section is deleted. Maps to column `section_id`.
+</ResponseField>
+
+<ResponseField name="dayId" type="integer" required>
+  Foreign key to `Day.id` (1–7). Maps to column `day_id`.
+</ResponseField>
+
+---
+
+### Day
+
+Static lookup table for days of the week, seeded at database initialization. Not user-owned.
+
+<ResponseField name="id" type="integer" required>
+  Day number: `1` = Monday through `7` = Sunday.
+</ResponseField>
+
+<ResponseField name="name" type="string" required>
+  Day name, maximum 10 characters (e.g., `"Monday"`).
+</ResponseField>
+
+---
+
+### Rule
+
+An optimization preference that belongs to a user. Rules are applied by the scheduling engine when generating schedules.
+
+<ResponseField name="id" type="string" required>
+  UUID primary key, auto-generated.
+</ResponseField>
+
+<ResponseField name="type" type="string" required>
+  One of the 11 rule type strings (e.g., `"NO_GAPS"`, `"AVOID_PROFESSOR"`). Maximum 50 characters. See [Rules](/concepts/rules) for the full list.
+</ResponseField>
+
+<ResponseField name="priorityOrder" type="integer" required>
+  Priority ranking for scoring. Minimum value is `1`. Lower number = higher weight in scoring (`weight = 100 / priorityOrder`). Maps to column `priority_order`.
+</ResponseField>
+
+<ResponseField name="parameters" type="JSON">
+  Optional JSON object containing rule-specific parameters. Shape varies by rule type. See [Rules](/concepts/rules) for parameter schemas.
+</ResponseField>
+
+<ResponseField name="userId" type="string" required>
+  Foreign key to `User.id`. Cascade deletes on user deletion. Maps to column `user_id`.
+</ResponseField>
+
+---
+
+### SavedSchedule
+
+A named schedule that a user has chosen to save after generation. It links to the specific sections that make up that schedule.
+
+<ResponseField name="id" type="string" required>
+  UUID primary key, auto-generated.
+</ResponseField>
+
+<ResponseField name="name" type="string" required>
+  User-defined name for the saved schedule, maximum 50 characters.
+</ResponseField>
+
+<ResponseField name="createdAt" type="DateTime" required>
+  Timestamp with timezone, set automatically on creation. Maps to column `created_at`.
+</ResponseField>
+
+<ResponseField name="userId" type="string" required>
+  Foreign key to `User.id`. Cascade deletes on user deletion. Maps to column `user_id`.
+</ResponseField>
+
+---
+
+### ScheduleSection
+
+Join table linking a `SavedSchedule` to the `Section` records it contains. The primary key is the composite of both foreign keys.
+
+<ResponseField name="scheduleId" type="string" required>
+  Foreign key to `SavedSchedule.id`. Cascade deletes when the saved schedule is deleted. Maps to column `schedule_id`.
+</ResponseField>
+
+<ResponseField name="sectionId" type="string" required>
+  Foreign key to `Section.id`. Cascade deletes when the section is deleted. Maps to column `section_id`.
+</ResponseField>
+
+---
+
+## User data isolation
+
+Every user-owned model (`Subject`, `Professor`, `Rule`, `SavedSchedule`) includes a `userId` column that is always populated with the authenticated user's ID. All API endpoints filter queries by `userId` from the JWT token, so:
+
+- You cannot read, update, or delete another user's data.
+- Subjects, professors, rules, and saved schedules created by one account are completely invisible to all other accounts.
+- Cascade deletes ensure that deleting a user removes all their data automatically.
+
+The scheduling engine also enforces isolation: when `SchedulingService.generate()` fetches sections, it queries only subjects where `userId` matches the authenticated user:
+
+```typescript scheduling.service.ts
+const sections = await this.prisma.section.findMany({
+  where: {
+    subject: {
+      id: { in: dto.subjectIds },
+      userId,
+    },
+  },
+  // ...
+});
+```
+
+## Full Prisma schema
+
+```prisma schema.prisma
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id        String   @id @default(uuid())
+  username  String   @unique @db.VarChar(50)
+  password  String
+  fullName  String   @map("full_name") @db.VarChar(100)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
+
+  professors     Professor[]
+  subjects       Subject[]
+  rules          Rule[]
+  savedSchedules SavedSchedule[]
+
+  @@map("user")
+}
+
+model Day {
+  id   Int    @id
+  name String @db.VarChar(10)
+
+  sectionDays SectionDay[]
+
+  @@map("days")
+}
+
+model Professor {
+  id       String  @id @default(uuid())
+  fullName String  @map("full_name") @db.VarChar(100)
+  userId   String? @map("user_id")
+
+  user     User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sections Section[]
+
+  @@map("professors")
+}
+
+model Subject {
+  id     String @id @default(uuid())
+  name   String @db.VarChar(100)
+  userId String @map("user_id")
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sections Section[]
+
+  @@map("subjects")
+}
+
+model Rule {
+  id            String @id @default(uuid())
+  type          String @db.VarChar(50)
+  priorityOrder Int    @map("priority_order")
+  parameters    Json?
+  userId        String @map("user_id")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("rules")
+}
+
+model SavedSchedule {
+  id        String   @id @default(uuid())
+  name      String   @db.VarChar(50)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz()
+  userId    String   @map("user_id")
+
+  user              User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  schedulesSections ScheduleSection[]
+
+  @@map("saved_schedules")
+}
+
+model Section {
+  id          String   @id @default(uuid())
+  startTime   DateTime @map("start_time") @db.Timetz()
+  endTime     DateTime @map("end_time") @db.Timetz()
+  subjectId   String   @map("subject_id")
+  professorId String?  @map("professor_id")
+
+  subject           Subject           @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  professor         Professor?        @relation(fields: [professorId], references: [id], onDelete: SetNull)
+  sectionDays       SectionDay[]
+  schedulesSections ScheduleSection[]
+
+  @@map("sections")
+}
+
+model SectionDay {
+  id        String @id @default(uuid())
+  sectionId String @map("section_id")
+  dayId     Int    @map("day_id")
+
+  section Section @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+  day     Day     @relation(fields: [dayId], references: [id])
+
+  @@map("sections_days")
+}
+
+model ScheduleSection {
+  scheduleId String @map("schedule_id")
+  sectionId  String @map("section_id")
+
+  savedSchedule SavedSchedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  section       Section       @relation(fields: [sectionId], references: [id], onDelete: Cascade)
+
+  @@id([scheduleId, sectionId])
+  @@map("schedules_sections")
+}
+```

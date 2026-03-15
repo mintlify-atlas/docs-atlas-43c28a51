@@ -1,0 +1,73 @@
+---
+title: 'Get subject'
+description: 'Retrieve a single subject by its ID.'
+---
+
+`GET /api/subjects/:id`
+
+Returns a single subject by ID. The subject must belong to the authenticated user.
+
+## Authentication
+
+This endpoint requires a valid Bearer token in the `Authorization` header.
+
+## Request
+
+### Path parameters
+
+<ParamField path="id" type="string" required>
+  The UUID of the subject to retrieve.
+</ParamField>
+
+## Response
+
+Returns the subject object.
+
+<ResponseField name="id" type="string" required>
+  Unique identifier for the subject (UUID).
+</ResponseField>
+
+<ResponseField name="name" type="string" required>
+  The name of the subject.
+</ResponseField>
+
+<ResponseField name="userId" type="string" required>
+  The ID of the user who owns this subject.
+</ResponseField>
+
+## Error codes
+
+| Status | Description |
+| ------ | ----------- |
+| `401 Unauthorized` | Missing or invalid Bearer token. |
+| `404 Not Found` | No subject with the given ID exists for the authenticated user. |
+
+<RequestExample>
+
+```bash cURL
+curl --request GET \
+  --url https://api.scheduly.app/api/subjects/a1b2c3d4-e5f6-7890-abcd-ef1234567890 \
+  --header 'Authorization: Bearer <token>'
+```
+
+</RequestExample>
+
+<ResponseExample>
+
+```json 200
+{
+  "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "name": "Matemáticas",
+  "userId": "f1e2d3c4-b5a6-7890-fedc-ba9876543210"
+}
+```
+
+```json 404
+{
+  "statusCode": 404,
+  "message": "Subject not found",
+  "error": "Not Found"
+}
+```
+
+</ResponseExample>

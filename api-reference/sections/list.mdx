@@ -1,0 +1,134 @@
+---
+title: 'List sections'
+description: 'Retrieve all sections belonging to the authenticated user.'
+---
+
+`GET /api/sections`
+
+Returns all sections whose subject belongs to the authenticated user. Each section includes its time range, subject, professor (if assigned), and meeting days.
+
+<Info>
+  All requests must include a valid Bearer token in the `Authorization` header.
+</Info>
+
+## Response
+
+Returns an array of section objects.
+
+<ResponseField name="id" type="string" required>
+  Unique identifier (UUID) of the section.
+</ResponseField>
+
+<ResponseField name="startTime" type="string" required>
+  Section start time as an ISO 8601 timestamp.
+</ResponseField>
+
+<ResponseField name="endTime" type="string" required>
+  Section end time as an ISO 8601 timestamp.
+</ResponseField>
+
+<ResponseField name="subjectId" type="string" required>
+  UUID of the associated subject.
+</ResponseField>
+
+<ResponseField name="professorId" type="string">
+  UUID of the assigned professor, or `null` if unassigned.
+</ResponseField>
+
+<ResponseField name="subject" type="object" required>
+  <Expandable title="properties">
+    <ResponseField name="id" type="string">UUID of the subject.</ResponseField>
+    <ResponseField name="name" type="string">Name of the subject.</ResponseField>
+    <ResponseField name="userId" type="string">UUID of the owning user.</ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="professor" type="object">
+  <Expandable title="properties">
+    <ResponseField name="id" type="string">UUID of the professor.</ResponseField>
+    <ResponseField name="fullName" type="string">Full name of the professor.</ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="sectionDays" type="object[]" required>
+  <Expandable title="properties">
+    <ResponseField name="id" type="string">UUID of the section-day record.</ResponseField>
+    <ResponseField name="sectionId" type="string">UUID of the parent section.</ResponseField>
+    <ResponseField name="dayId" type="number">Day identifier (1=Monday … 7=Sunday).</ResponseField>
+    <ResponseField name="day" type="object">
+      <Expandable title="properties">
+        <ResponseField name="id" type="number">Day ID.</ResponseField>
+        <ResponseField name="name" type="string">Day name, e.g. `"Tuesday"`.</ResponseField>
+      </Expandable>
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Error codes
+
+| Status | Description |
+| ------ | ----------- |
+| `401`  | Unauthorized — missing or invalid Bearer token. |
+
+<RequestExample>
+
+```bash cURL
+curl --request GET \
+  --url https://api.scheduly.app/api/sections \
+  --header 'Authorization: Bearer <token>'
+```
+
+</RequestExample>
+
+<ResponseExample>
+
+```json 200
+[
+  {
+    "id": "c3d4e5f6-a7b8-9012-cdef-123456789012",
+    "startTime": "1970-01-01T07:00:00.000Z",
+    "endTime": "1970-01-01T09:00:00.000Z",
+    "subjectId": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "professorId": "b2c3d4e5-f6a7-8901-bcde-f12345678901",
+    "subject": {
+      "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+      "name": "Calculus I",
+      "userId": "d4e5f6a7-b8c9-0123-defa-234567890123"
+    },
+    "professor": {
+      "id": "b2c3d4e5-f6a7-8901-bcde-f12345678901",
+      "fullName": "Dr. Jane Smith"
+    },
+    "sectionDays": [
+      { "id": "e5f6a7b8-c9d0-1234-efab-345678901234", "sectionId": "c3d4e5f6-a7b8-9012-cdef-123456789012", "dayId": 1, "day": { "id": 1, "name": "Monday" } },
+      { "id": "f6a7b8c9-d0e1-2345-fabc-456789012345", "sectionId": "c3d4e5f6-a7b8-9012-cdef-123456789012", "dayId": 3, "day": { "id": 3, "name": "Wednesday" } }
+    ]
+  },
+  {
+    "id": "d4e5f6a7-b8c9-0123-defa-234567890123",
+    "startTime": "1970-01-01T10:00:00.000Z",
+    "endTime": "1970-01-01T12:00:00.000Z",
+    "subjectId": "b2c3d4e5-f6a7-8901-bcde-f12345678901",
+    "professorId": null,
+    "subject": {
+      "id": "b2c3d4e5-f6a7-8901-bcde-f12345678901",
+      "name": "Linear Algebra",
+      "userId": "d4e5f6a7-b8c9-0123-defa-234567890123"
+    },
+    "professor": null,
+    "sectionDays": [
+      { "id": "a7b8c9d0-e1f2-3456-abcd-567890123456", "sectionId": "d4e5f6a7-b8c9-0123-defa-234567890123", "dayId": 2, "day": { "id": 2, "name": "Tuesday" } },
+      { "id": "b8c9d0e1-f2a3-4567-bcde-678901234567", "sectionId": "d4e5f6a7-b8c9-0123-defa-234567890123", "dayId": 4, "day": { "id": 4, "name": "Thursday" } }
+    ]
+  }
+]
+```
+
+```json 401
+{
+  "statusCode": 401,
+  "message": "Unauthorized"
+}
+```
+
+</ResponseExample>

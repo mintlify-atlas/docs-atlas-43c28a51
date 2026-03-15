@@ -1,0 +1,59 @@
+---
+title: 'Delete rule'
+description: 'Permanently delete an optimization rule.'
+---
+
+`DELETE /api/rules/:id`
+
+Permanently deletes a rule. The rule must belong to the authenticated user. Returns no content on success.
+
+<Warning>
+  Deleting a rule removes it from the scheduling engine's evaluation. Regenerate any saved schedules that depended on this rule.
+</Warning>
+
+<Info>
+  All requests must include a valid Bearer token in the `Authorization` header.
+</Info>
+
+## Path parameters
+
+<ParamField path="id" type="string" required>
+  UUID of the rule to delete.
+</ParamField>
+
+## Response
+
+Returns `204 No Content` on success with an empty body.
+
+## Error codes
+
+| Status | Description |
+| ------ | ----------- |
+| `401`  | Unauthorized — missing or invalid Bearer token. |
+| `404`  | Rule not found, or does not belong to the authenticated user. |
+
+<RequestExample>
+
+```bash cURL
+curl --request DELETE \
+  --url https://api.scheduly.app/api/rules/e5f6a7b8-c9d0-1234-efab-345678901234 \
+  --header 'Authorization: Bearer <token>'
+```
+
+</RequestExample>
+
+<ResponseExample>
+
+```json 204
+
+```
+
+```json 404
+{
+  "statusCode": 404,
+  "message": "Rule not found",
+  "error": "Not Found"
+}
+```
+
+</ResponseExample>

@@ -1,0 +1,51 @@
+---
+title: 'Logout'
+description: 'Clear the refresh token cookie and end the current session.'
+---
+
+`POST /api/auth/logout`
+
+Clears the `refreshToken` cookie, effectively ending the session. After logout, the refresh token cookie is no longer sent and any subsequent calls to the [Refresh](/api-reference/auth/refresh) endpoint will return `401 Unauthorized`.
+
+<Note>
+  This endpoint does not require authentication. Calling it without a valid session still returns a successful response and clears any existing cookie.
+</Note>
+
+## Authentication
+
+None required.
+
+## Request body
+
+None.
+
+## Response
+
+<ResponseField name="message" type="string" required>
+  Confirmation message. Always `"Logged out successfully"`.
+</ResponseField>
+
+## Error codes
+
+This endpoint does not return error responses under normal conditions. The cookie is cleared regardless of whether a valid session existed.
+
+<RequestExample>
+
+```bash cURL
+curl --request POST \
+  --url https://api.scheduly.com/api/auth/logout \
+  --cookie ./cookies.txt \
+  --cookie-jar ./cookies.txt
+```
+
+</RequestExample>
+
+<ResponseExample>
+
+```json 200
+{
+  "message": "Logged out successfully"
+}
+```
+
+</ResponseExample>

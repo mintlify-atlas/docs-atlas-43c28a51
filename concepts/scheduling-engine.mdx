@@ -1,0 +1,203 @@
+---
+title: Scheduling engine
+description: How the two-phase backtracking and scoring algorithm generates your top 3 schedule combinations.
+---
+
+The scheduling engine is the core of Scheduly API. It takes your subjects and optimization rules as input and returns the three highest-scoring conflict-free schedule combinations. The engine works in two sequential phases: **Pruning** followed by **Backtracking + Scoring**.
+
+```
+src/scheduling/
+├── engine/          # SchedulingEngine — orchestrates both phases
+├── pruning/         # SectionPruner — Phase 1: hard-constraint filtering
+└── rules/           # RuleScorer + strategies — Phase 2: scoring
+```
+
+## Algorithm overview
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  Input: sectionsBySubject (Map), userRules (ordered by priority) │
+└──────────────────────────┬──────────────────────────────────────┘
+                           │
+                 ┌─────────▼─────────┐
+                 │   Phase 1         │
+                 │   PRUNING         │  Remove sections violating
+                 │   SectionPruner   │  hard constraints
+                 └─────────┬─────────┘
+                           │  Pruned sections per subject
+                 ┌─────────▼─────────┐
+                 │   Phase 2         │
+                 │   BACKTRACKING    │  Explore all conflict-free
+                 │   + SCORING       │  combinations, score each
+                 └─────────┬─────────┘
+                           │  Sorted ScoredCombination[]
+                 ┌─────────▼─────────┐
+                 │   Output: Top 3   │
+                 │   combinations    │
+                 └───────────────────┘
+```
+
+## Phase 1 — Pruning
+
+Before any search begins, `SectionPruner` filters the candidate sections for each subject using hard constraints from your rules. A hard constraint is one that makes a section categorically unacceptable — not a preference, but an absolute elimination.
+
+Two rule types trigger pruning:
+
+| Rule | What gets removed |
+|------|-------------------|
+| `AVOID_PROFESSOR` | Any section taught by the specified professor ID |
+| `LUNCH_BREAK_PROTECTED` | Any section whose time range overlaps the protected lunch window |
+
+If every section for a subject is eliminated after pruning, the engine throws an error and tells you to relax the conflicting rules.
+
+<Note>
+  Pruning happens before backtracking, so the search space is smaller and performance is better. Sections that fail hard constraints are never even considered during exploration.
+</Note>
+
+### Pruning source
+
+The pruning logic lives in `src/scheduling/pruning/section-pruner.ts`:
+
+```typescript section-pruner.ts
+export class SectionPruner {
+  prune(
+    sections: SectionWithRelations[],
+    userRules: UserRule[],
+  ): SectionWithRelations[] {
+    let filtered = [...sections];
+
+    for (const rule of userRules) {
+      if (rule.type === RuleType.AVOID_PROFESSOR) {
+        filtered = this.applyAvoidProfessor(filtered, rule.parameters);
+      }
+      if (rule.type === RuleType.LUNCH_BREAK_PROTECTED) {
+        filtered = this.applyLunchBreakPruning(filtered, rule.parameters);
+      }
+    }
+
+    return filtered;
+  }
+}
+```
+
+## Phase 2 — Backtracking + Scoring
+
+After pruning, the engine explores every valid combination of sections (one section per subject) using a recursive backtracking algorithm. A combination is valid only if no two sections overlap in time on the same day.
+
+### Conflict detection
+
+Two sections conflict when they share at least one day **and** their time ranges overlap:
+
+```typescript scheduling-engine.ts
+private hasConflict(
+  section: SectionWithRelations,
+  current: SectionWithRelations[],
+): boolean {
+  for (const chosen of current) {
+    const sharedDays = section.sectionDays.some((sd) =>
+      chosen.sectionDays.some((cd) => cd.day.name === sd.day.name),
+    );
+    if (!sharedDays) continue;
+
+    const overlaps =
+      section.startTime.getTime() < chosen.endTime.getTime() &&
+      section.endTime.getTime() > chosen.startTime.getTime();
+    if (overlaps) return true;
+  }
+  return false;
+}
+```
+
+### Search order optimization
+
+Before backtracking starts, subjects are sorted by number of available sections (fewest first). This prunes the search tree earlier because the most constrained subjects are resolved first.
+
+### Scoring
+
+When a complete combination is assembled (one section per subject with no conflicts), `RuleScorer.calculate()` scores it:
+
+```typescript rule-scorer.ts
+calculate(
+  combination: SectionWithRelations[],
+  userRules: UserRule[],
+): number {
+  let totalScore = 0;
+
+  for (const rule of userRules) {
+    const strategy = this.strategies.get(rule.type as RuleType);
+    if (!strategy) continue;
+
+    const weight = 100 / rule.priorityOrder;
+    const value = strategy.evaluate(combination, rule.parameters);
+    totalScore += weight * value;
+  }
+
+  return totalScore;
+}
+```
+
+Each rule contributes `(100 / priorityOrder) × value` to the total score, where `value` is a number in the range `[0, 1]` returned by the rule's strategy. A rule with `priorityOrder: 1` has weight `100`; a rule with `priorityOrder: 4` has weight `25`. Lower `priorityOrder` number → higher influence on the score.
+
+Each rule strategy is a class implementing the `RuleStrategy` interface from `src/scheduling/rules/strategies/rule-strategy.interface.ts`:
+
+```typescript rule-strategy.interface.ts
+export interface RuleStrategy {
+  evaluate(
+    combination: SectionWithRelations[],
+    parameter: RuleParameter,
+  ): number;
+}
+```
+
+Strategies live in `src/scheduling/rules/strategies/` — one file per rule type.
+
+## Top 3 results
+
+As valid combinations are found, the engine maintains a sorted list of the top 3 by score:
+
+```typescript scheduling-engine.ts
+private readonly TOP_RESULTS = 3;
+
+private updateTopResults(
+  topResults: ScoredCombination[],
+  candidate: ScoredCombination,
+): void {
+  topResults.push(candidate);
+  topResults.sort((a, b) => b.score - a.score);
+  if (topResults.length > this.TOP_RESULTS) {
+    topResults.pop();
+  }
+}
+```
+
+The final return value is sorted descending by score — index `0` is always the best-scoring schedule.
+
+<Info>
+  Returning 3 results gives you meaningful alternatives without overwhelming you with options. The rank is determined purely by the numeric score; you can inspect each combination and choose which one to save.
+</Info>
+
+## Full algorithm flow
+
+<Steps>
+  <Step title="Load rules and sections">
+    `SchedulingService` fetches the user's rules ordered by `priorityOrder` ascending, then fetches all sections for the requested subject IDs. Sections are grouped into a `Map<subjectId, Section[]>`.
+  </Step>
+  <Step title="Run Phase 1 — Pruning">
+    For each subject's section list, `SectionPruner.prune()` removes any section that violates an `AVOID_PROFESSOR` or `LUNCH_BREAK_PROTECTED` rule. If a subject ends up with zero sections, an error is thrown.
+  </Step>
+  <Step title="Sort subjects">
+    Subjects are reordered by ascending section count so the backtracker resolves the most constrained subjects first.
+  </Step>
+  <Step title="Run Phase 2 — Backtracking">
+    The recursive `backtrack()` method tries each candidate section for the current subject. Before adding a section to the current combination, `hasConflict()` checks for day/time overlap against all already-chosen sections. Conflicting sections are skipped. Valid sections are added and the recursion proceeds to the next subject.
+  </Step>
+  <Step title="Score each complete combination">
+    When all subjects are placed (base case of the recursion), `RuleScorer.calculate()` scores the combination by iterating over every user rule in priority order, evaluating its strategy, and summing the weighted scores.
+  </Step>
+  <Step title="Maintain top 3">
+    Each scored combination is inserted into the `topResults` list, which is kept sorted and capped at 3 entries.
+  </Step>
+  <Step title="Return results">
+    The engine returns the top 3 combinations sorted by descending score. The service maps these to `ScheduleResultDto` objects, assigning rank 1–3.
+  </Step>
+</Steps>

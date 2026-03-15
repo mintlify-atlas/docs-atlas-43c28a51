@@ -1,0 +1,190 @@
+---
+title: Authentication
+description: Scheduly API uses JWT access tokens and HttpOnly refresh token cookies to authenticate requests.
+---
+
+Scheduly API uses a two-token authentication system:
+
+- **Access token** — a short-lived JWT (15 minutes) sent in the response body and passed as a `Bearer` token in every authenticated request.
+- **Refresh token** — a longer-lived JWT (7 days) stored in an HttpOnly cookie and never exposed to JavaScript.
+
+## Registration
+
+Create a new user account with `POST /api/auth/register`.
+
+**Request body**
+
+| Field | Type | Required | Constraints |
+|-------|------|----------|-------------|
+| `username` | string | Yes | Max 50 characters, must be unique |
+| `password` | string | Yes | Min 8 characters |
+| `fullName` | string | Yes | Max 100 characters |
+
+```bash
+curl -X POST http://localhost:3000/api/auth/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "jhojanRop",
+    "password": "12345678",
+    "fullName": "Jhojan Ropero"
+  }'
+```
+
+A successful registration returns `201 Created` with the new user object. The password is never returned.
+
+```json
+{
+  "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "username": "jhojanRop",
+  "fullName": "Jhojan Ropero",
+  "createdAt": "2026-03-15T00:00:00.000Z"
+}
+```
+
+<Warning>
+  Registering with a username that already exists returns `409 Conflict`. Usernames must be unique across all accounts.
+</Warning>
+
+## Login
+
+Authenticate with `POST /api/auth/login` to receive your tokens.
+
+**Request body**
+
+| Field | Type | Required |
+|-------|------|----------|
+| `username` | string | Yes |
+| `password` | string | Yes |
+
+```bash
+curl -X POST http://localhost:3000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -c cookies.txt \
+  -d '{
+    "username": "jhojanRop",
+    "password": "12345678"
+  }'
+```
+
+A successful login returns `200 OK`:
+
+```json
+{
+  "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+}
+```
+
+At the same time, the server sets an HttpOnly cookie on the response:
+
+```
+Set-Cookie: refreshToken=eyJhbGci...; HttpOnly; SameSite=Strict; Max-Age=604800
+```
+
+<Note>
+  The `-c cookies.txt` flag in curl saves the `refreshToken` cookie to a file so it can be sent automatically on subsequent requests with `-b cookies.txt`.
+</Note>
+
+**Token lifetimes**
+
+| Token | Lifetime | Storage |
+|-------|----------|---------|
+| Access token | 15 minutes | Response body — store in memory |
+| Refresh token | 7 days | HttpOnly cookie — managed by the browser or curl |
+
+<Tip>
+  Store the access token in memory (a JavaScript variable), not in `localStorage`. The refresh token is protected by the HttpOnly cookie and is never accessible to JavaScript.
+</Tip>
+
+## Using the access token
+
+Pass the access token in the `Authorization` header as a `Bearer` token on every authenticated request:
+
+```bash
+curl http://localhost:3000/api/subjects \
+  -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+```
+
+The JWT strategy extracts the token from the `Authorization` header, verifies its signature against `JWT_SECRET`, and rejects expired tokens. If the token is missing, invalid, or expired, the API returns `401 Unauthorized`.
+
+<Warning>
+  Access tokens expire after **15 minutes**. Requests made with an expired token return `401 Unauthorized`. Use the refresh endpoint to obtain a new token without asking the user to log in again.
+</Warning>
+
+## Refreshing tokens
+
+Obtain a new access token — and rotate the refresh token — with `POST /api/auth/refresh`. The endpoint reads the `refreshToken` cookie automatically; no request body is needed.
+
+```bash
+curl -X POST http://localhost:3000/api/auth/refresh \
+  -b cookies.txt \
+  -c cookies.txt
+```
+
+A successful refresh returns `200 OK` with a new access token:
+
+```json
+{
+  "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+}
+```
+
+The response also sets a new `refreshToken` cookie, replacing the previous one. This is **token rotation** — each refresh produces a fresh pair of tokens.
+
+<Note>
+  Both the `-b cookies.txt` and `-c cookies.txt` flags are needed: `-b` sends the existing cookie and `-c` saves the newly rotated cookie.
+</Note>
+
+<Warning>
+  If the refresh token is expired (older than 7 days), the endpoint returns `401 Unauthorized` and the user must log in again.
+</Warning>
+
+## Logout
+
+Invalidate the session by clearing the refresh token cookie with `POST /api/auth/logout`.
+
+```bash
+curl -X POST http://localhost:3000/api/auth/logout \
+  -b cookies.txt \
+  -c cookies.txt
+```
+
+A successful logout returns `200 OK`:
+
+```json
+{
+  "message": "Logged out successfully"
+}
+```
+
+The server calls `clearCookie('refreshToken')`, removing it from the browser or cookie jar. Any subsequent calls to `/api/auth/refresh` will fail until the user logs in again.
+
+<Tip>
+  Discard the access token from memory when the user logs out. With the refresh token cookie cleared and the access token removed, the user is fully signed out.
+</Tip>
+
+## Token lifetime reference
+
+| Token | Lifetime | Location | Accessible to JS |
+|-------|----------|----------|------------------|
+| Access token | 15 minutes | Response body | Yes — keep in memory only |
+| Refresh token | 7 days | HttpOnly cookie | No |
+
+## Authentication flow summary
+
+<Steps>
+  <Step title="Register">
+    Call `POST /api/auth/register` with `username`, `password`, and `fullName`.
+  </Step>
+  <Step title="Login">
+    Call `POST /api/auth/login`. Save the `accessToken` from the response body. The `refreshToken` cookie is set automatically.
+  </Step>
+  <Step title="Make authenticated requests">
+    Include `Authorization: Bearer <accessToken>` in every request header.
+  </Step>
+  <Step title="Refresh when expired">
+    When you receive a `401`, call `POST /api/auth/refresh`. The cookie is sent automatically and you receive a new `accessToken`.
+  </Step>
+  <Step title="Logout">
+    Call `POST /api/auth/logout` to clear the cookie and end the session.
+  </Step>
+</Steps>

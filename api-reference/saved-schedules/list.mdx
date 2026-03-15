@@ -1,0 +1,135 @@
+---
+title: 'List saved schedules'
+description: 'Retrieve all schedules saved by the authenticated user, ordered from newest to oldest.'
+---
+
+`GET /api/saved-schedules`
+
+Returns all saved schedules that belong to the authenticated user. Results are ordered by `createdAt` descending (most recently saved first).
+
+## Authentication
+
+Requires a valid Bearer token in the `Authorization` header.
+
+<ParamField header="Authorization" type="string" required>
+  Bearer token obtained from the login endpoint. Format: `Bearer <token>`.
+</ParamField>
+
+## Response
+
+Returns an array of saved schedule objects. Returns an empty array if the user has no saved schedules.
+
+<ResponseField name="[].id" type="string" required>
+  UUID of the saved schedule.
+</ResponseField>
+
+<ResponseField name="[].name" type="string" required>
+  Display name of the saved schedule.
+</ResponseField>
+
+<ResponseField name="[].createdAt" type="string" required>
+  ISO 8601 timestamp of when the schedule was saved.
+</ResponseField>
+
+<ResponseField name="[].sections" type="object[]" required>
+  The sections that make up this schedule.
+
+  <Expandable title="section properties">
+    <ResponseField name="sectionId" type="string" required>
+      UUID of the section.
+    </ResponseField>
+    <ResponseField name="subject" type="string" required>
+      Name of the subject.
+    </ResponseField>
+    <ResponseField name="professor" type="string | null" required>
+      Full name of the professor, or `null` if unassigned.
+    </ResponseField>
+    <ResponseField name="startTime" type="string" required>
+      Section start time in `HH:MM` format (24-hour, UTC).
+    </ResponseField>
+    <ResponseField name="endTime" type="string" required>
+      Section end time in `HH:MM` format (24-hour, UTC).
+    </ResponseField>
+    <ResponseField name="days" type="string[]" required>
+      Days of the week on which the section meets.
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+## Error codes
+
+| Status | Description |
+| ------ | ----------- |
+| `401`  | Missing or invalid Bearer token. |
+
+<RequestExample>
+
+```bash cURL
+curl --request GET \
+  --url https://api.scheduly.app/api/saved-schedules \
+  --header 'Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...'
+```
+
+</RequestExample>
+
+<ResponseExample>
+
+```json 200
+[
+  {
+    "id": "1a2b3c4d-5e6f-7890-abcd-ef1234567890",
+    "name": "My ideal schedule",
+    "createdAt": "2026-03-15T14:32:00.000Z",
+    "sections": [
+      {
+        "sectionId": "d4e5f6a7-b8c9-0123-defa-234567890123",
+        "subject": "Calculus II",
+        "professor": "Dr. Maria Lopez",
+        "startTime": "08:00",
+        "endTime": "10:00",
+        "days": ["monday", "wednesday"]
+      },
+      {
+        "sectionId": "e5f6a7b8-c9d0-1234-efab-345678901234",
+        "subject": "Physics I",
+        "professor": "Prof. Carlos Rivera",
+        "startTime": "10:00",
+        "endTime": "12:00",
+        "days": ["monday", "wednesday"]
+      }
+    ]
+  },
+  {
+    "id": "2b3c4d5e-6f7a-8901-bcde-f12345678901",
+    "name": "Backup schedule",
+    "createdAt": "2026-03-10T09:15:00.000Z",
+    "sections": [
+      {
+        "sectionId": "a7b8c9d0-e1f2-3456-abcd-567890123456",
+        "subject": "Calculus II",
+        "professor": "Dr. Ana Torres",
+        "startTime": "14:00",
+        "endTime": "16:00",
+        "days": ["tuesday", "thursday"]
+      },
+      {
+        "sectionId": "b8c9d0e1-f2a3-4567-bcde-678901234567",
+        "subject": "Physics I",
+        "professor": "Prof. Carlos Rivera",
+        "startTime": "16:00",
+        "endTime": "18:00",
+        "days": ["tuesday", "thursday"]
+      }
+    ]
+  }
+]
+```
+
+```json 401
+{
+  "statusCode": 401,
+  "message": "Unauthorized"
+}
+```
+
+</ResponseExample>
